@@ -1,0 +1,320 @@
+# Project Chimera Configuration
+# Copy this file to config.yaml and adjust values as needed
+# This file contains static configuration that doesn't change frequently
+
+# =============================================================================
+# PROTOCOL ADDRESSES (BASE MAINNET)
+# =============================================================================
+
+protocols:
+  moonwell:
+    name: "Moonwell"
+    comptroller: "0x0000000000000000000000000000000000000000"  # TODO: Add actual address
+    liquidation_bonus: 0.08  # 8% liquidation bonus
+    
+  seamless:
+    name: "Seamless Protocol"
+    pool: "0x0000000000000000000000000000000000000000"  # TODO: Add actual address
+    liquidation_bonus: 0.05  # 5% liquidation bonus
+
+# =============================================================================
+# ORACLE ADDRESSES (BASE MAINNET)
+# =============================================================================
+
+oracles:
+  chainlink:
+    # Chainlink price feeds on Base
+    eth_usd: "0x0000000000000000000000000000000000000000"  # TODO: Add actual address
+    usdc_usd: "0x0000000000000000000000000000000000000000"  # TODO: Add actual address
+    wbtc_usd: "0x0000000000000000000000000000000000000000"  # TODO: Add actual address
+    
+  pyth:
+    # Pyth Network oracle on Base
+    contract: "0x0000000000000000000000000000000000000000"  # TODO: Add actual address
+    eth_usd_feed_id: "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace"
+    usdc_usd_feed_id: "0xeaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a"
+
+# =============================================================================
+# DEX ADDRESSES (BASE MAINNET)
+# =============================================================================
+
+dex:
+  uniswap_v3:
+    router: "0x0000000000000000000000000000000000000000"  # TODO: Add actual address
+    factory: "0x0000000000000000000000000000000000000000"  # TODO: Add actual address
+    quoter: "0x0000000000000000000000000000000000000000"  # TODO: Add actual address
+    
+  aerodrome:
+    router: "0x0000000000000000000000000000000000000000"  # TODO: Add actual address
+    factory: "0x0000000000000000000000000000000000000000"  # TODO: Add actual address
+
+# =============================================================================
+# FLASH LOAN PROVIDERS (BASE MAINNET)
+# =============================================================================
+
+flash_loans:
+  aave_v3:
+    pool: "0x0000000000000000000000000000000000000000"  # TODO: Add actual address
+    premium: 0.0009  # 0.09% premium
+    
+  balancer:
+    vault: "0x0000000000000000000000000000000000000000"  # TODO: Add actual address
+    premium: 0.0000  # 0% premium (but gas costs higher)
+
+# =============================================================================
+# BASE L2 SYSTEM CONTRACTS
+# =============================================================================
+
+base_system:
+  l1_block: "0x4200000000000000000000000000000000000015"  # L1Block precompile
+  gas_price_oracle: "0x420000000000000000000000000000000000000F"  # GasPriceOracle
+
+# =============================================================================
+# OPERATIONAL LIMITS
+# =============================================================================
+
+limits:
+  # Tier 1 limits (starting values)
+  max_single_execution_usd: 500
+  max_daily_volume_usd: 2500
+  min_profit_usd: 50
+  
+  # Tier 2 limits (after graduation)
+  # max_single_execution_usd: 1000
+  # max_daily_volume_usd: 5000
+  
+  # Tier 3 limits (after graduation)
+  # max_single_execution_usd: 2500
+  # max_daily_volume_usd: 12500
+  
+  # Tier 4 limits (after graduation)
+  # max_single_execution_usd: 5000
+  # max_daily_volume_usd: 25000
+
+# =============================================================================
+# PERFORMANCE THRESHOLDS
+# =============================================================================
+
+thresholds:
+  # State machine transition thresholds
+  min_inclusion_rate: 0.60  # Below 60% triggers THROTTLED
+  critical_inclusion_rate: 0.50  # Below 50% triggers HALTED
+  
+  min_simulation_accuracy: 0.90  # Below 90% triggers THROTTLED
+  critical_simulation_accuracy: 0.85  # Below 85% triggers HALTED
+  
+  max_consecutive_failures: 3  # 3 failures triggers HALTED
+  
+  # State divergence threshold
+  max_state_divergence_bps: 10  # 0.1% divergence triggers HALT
+  
+  # Sequencer health thresholds
+  max_block_gap: 1  # More than 1 block gap triggers HALT
+  max_timestamp_jump_seconds: 20  # More than 20s jump triggers HALT
+  max_reorg_depth: 3  # Reorg deeper than 3 blocks triggers investigation
+
+# =============================================================================
+# BRIBE OPTIMIZATION
+# =============================================================================
+
+bribe:
+  base_percentage: 0.15  # Start at 15% of gross profit
+  max_percentage: 0.40  # Cap at 40% of gross profit
+  min_percentage: 0.10  # Floor at 10% of gross profit
+  
+  # Adjustment parameters
+  adjustment_window: 100  # Recalculate every 100 submissions
+  increase_step: 0.05  # Increase by 5% if inclusion low
+  decrease_step: 0.02  # Decrease by 2% if inclusion high
+  
+  # Inclusion rate targets
+  target_inclusion_rate: 0.70  # Optimal target
+  low_inclusion_threshold: 0.60  # Below this, increase bribe
+  high_inclusion_threshold: 0.90  # Above this, decrease bribe
+
+# =============================================================================
+# TIMING PARAMETERS
+# =============================================================================
+
+timing:
+  # Scanning and processing
+  scan_interval_seconds: 5  # Scan for opportunities every 5 seconds
+  reconciliation_interval_blocks: 1  # Reconcile state every 1 block
+  metrics_update_interval_seconds: 600  # Update metrics every 10 minutes
+  
+  # Retry and backoff
+  max_retries: 3
+  initial_backoff_seconds: 1
+  max_backoff_seconds: 60
+  backoff_multiplier: 2
+  
+  # Timeouts
+  rpc_timeout_seconds: 30
+  simulation_timeout_seconds: 10
+  database_timeout_seconds: 5
+
+# =============================================================================
+# ORACLE CONFIGURATION
+# =============================================================================
+
+oracle:
+  # Primary oracle for detection (speed matters)
+  primary: "chainlink"
+  
+  # Secondary oracle for sanity checks
+  secondary: "pyth"
+  
+  # Sanity check thresholds
+  max_oracle_divergence: 0.05  # 5% max divergence between oracles
+  max_price_movement_per_block: 0.30  # 30% max price movement in one block
+  
+  # Staleness checks
+  max_price_age_seconds: 3600  # 1 hour max age
+  
+  # Confirmation requirements
+  min_confirmation_blocks: 2  # Position must be unhealthy for 2+ blocks
+
+# =============================================================================
+# COST ESTIMATION
+# =============================================================================
+
+cost_estimation:
+  # Gas estimation
+  gas_buffer_percentage: 0.10  # Add 10% buffer to gas estimates
+  priority_fee_percentile: 75  # Use 75th percentile for priority fee
+  
+  # L1 data cost estimation
+  l1_scalar_cache_seconds: 300  # Cache L1 scalar for 5 minutes
+  
+  # Other costs
+  flash_loan_premium: 0.0009  # 0.09% (Aave V3)
+  dex_slippage_budget: 0.01  # 1% slippage budget
+  
+  # Profit estimation (rough, before simulation)
+  estimated_arbitrage_profit: 0.03  # Assume 3% arbitrage profit
+
+# =============================================================================
+# SAFETY CONFIGURATION
+# =============================================================================
+
+safety:
+  # Reserve fund
+  reserve_fund_percentage: 0.30  # Maintain 30% reserve
+  
+  # Operator balance alerts
+  min_operator_balance_eth: 0.3  # Warning at 0.3 ETH
+  critical_operator_balance_eth: 0.1  # Critical alert at 0.1 ETH
+  
+  # Daily volume reset
+  daily_reset_hour_utc: 0  # Reset at midnight UTC
+  
+  # State machine
+  throttle_execution_rate: 0.50  # Execute 50% in THROTTLED state
+  halt_sleep_seconds: 60  # Sleep 60s between checks in HALTED state
+
+# =============================================================================
+# MONITORING CONFIGURATION
+# =============================================================================
+
+monitoring:
+  # Metrics collection
+  metrics_export_interval_seconds: 60  # Export to CloudWatch every 60s
+  metrics_retention_days: 30
+  
+  # Alert thresholds
+  alert_on_state_change: true
+  alert_on_limit_approach_percentage: 0.80  # Alert at 80% of limit
+  alert_on_key_rotation_days: 7  # Alert 7 days before rotation due
+  
+  # Dashboard refresh
+  dashboard_refresh_seconds: 5
+
+# =============================================================================
+# LOGGING CONFIGURATION
+# =============================================================================
+
+logging:
+  # Log levels by module
+  default_level: "INFO"
+  
+  module_levels:
+    state_engine: "INFO"
+    opportunity_detector: "INFO"
+    execution_planner: "DEBUG"  # More verbose for critical module
+    safety_controller: "INFO"
+    
+  # Log retention
+  retention_days: 90  # Keep logs for 90 days locally
+  database_retention_years: 3  # Keep in database for 3 years
+  
+  # Structured logging
+  format: "json"  # json or text
+  include_context: true
+  include_stack_trace: true
+
+# =============================================================================
+# CACHE CONFIGURATION
+# =============================================================================
+
+cache:
+  # Redis TTLs
+  position_ttl_seconds: 60
+  oracle_price_ttl_seconds: 60
+  block_ttl_seconds: 30
+  sequencer_health_ttl_seconds: 30
+  
+  # Cache sizes
+  max_positions_in_memory: 1000
+  max_execution_history_in_memory: 1000
+  
+  # Fallback behavior
+  use_memory_fallback: true  # Use in-memory cache if Redis unavailable
+
+# =============================================================================
+# SUBMISSION PATHS
+# =============================================================================
+
+submission_paths:
+  # Available paths (will be tested on testnet)
+  - name: "direct_mempool"
+    enabled: true
+    method: "eth_sendRawTransaction"
+    
+  # - name: "base_builder"
+  #   enabled: false  # Enable after discovering Base-specific builders
+  #   endpoint: "https://builder.base.org"
+  
+  # - name: "private_rpc"
+  #   enabled: false  # Enable if Alchemy/QuickNode offer priority
+  #   endpoint: "https://priority.alchemy.com"
+
+# =============================================================================
+# TESTING CONFIGURATION
+# =============================================================================
+
+testing:
+  # Fork testing
+  fork_block_number: null  # null = latest, or specify block number
+  
+  # Test data
+  historical_data_days: 30
+  min_historical_liquidations: 20
+  
+  # Backtest parameters
+  detection_latency_ms: 500
+  build_latency_ms: 200
+  
+  # Coverage requirements
+  min_unit_test_coverage: 0.80  # 80%
+  min_critical_path_coverage: 0.95  # 95%
+  min_contract_coverage: 0.95  # 95%
+
+# =============================================================================
+# NOTES
+# =============================================================================
+
+# 1. Copy this file to config.yaml: cp config.yaml.example config.yaml
+# 2. Update protocol addresses with actual deployed addresses
+# 3. Adjust limits based on your risk tolerance
+# 4. Test configuration on testnet before mainnet
+# 5. Review and update regularly as protocols upgrade
