@@ -154,8 +154,9 @@ This implementation plan breaks down the feature into discrete, manageable codin
   - Test chain reorganization handling
   - _Requirements: 7.1.1_
 
-- [ ] 4. Implement OpportunityDetector module
-- [ ] 4.1 Implement health factor calculation
+- [x] 4. Implement OpportunityDetector module
+
+- [x] 4.1 Implement health factor calculation
 
   - Fetch Chainlink oracle prices for collateral and debt assets
   - Calculate health*factor = (collateral_amount * collateral*price * liquidation_threshold) / (debt_amount \* debt_price)
@@ -163,7 +164,7 @@ This implementation plan breaks down the feature into discrete, manageable codin
   - Scan all positions every 5 seconds maximum
   - _Requirements: 1.2, 3.2.1, 3.2.2_
 
-- [ ] 4.2 Implement multi-oracle sanity checks
+- [x] 4.2 Implement multi-oracle sanity checks
 
   - Fetch secondary oracle price from Pyth or Redstone
   - Calculate divergence: |primary - secondary| / primary
@@ -172,7 +173,7 @@ This implementation plan breaks down the feature into discrete, manageable codin
   - Skip if price moved >30% in one block
   - _Requirements: 1.2, 3.2.2, 3.2.3_
 
-- [ ] 4.3 Implement confirmation blocks logic
+- [x] 4.3 Implement confirmation blocks logic
 
   - Track blocks_unhealthy counter for each position
   - Increment counter each block when health_factor < 1.0
@@ -180,7 +181,7 @@ This implementation plan breaks down the feature into discrete, manageable codin
   - Reset counter when health_factor >= 1.0
   - _Requirements: 1.2, 3.2.3_
 
-- [ ] 4.4 Implement protocol state checks
+- [x] 4.4 Implement protocol state checks
 
   - Verify liquidation function is not paused via protocol contract call
   - Check protocol rate limits
@@ -188,7 +189,7 @@ This implementation plan breaks down the feature into discrete, manageable codin
   - Skip opportunity if any check fails
   - _Requirements: 1.2, 3.2.3_
 
-- [ ] 4.5 Implement rough profit estimation
+- [x] 4.5 Implement rough profit estimation
 
   - Estimate liquidation bonus: collateral*amount * collateral*price * liquidation_bonus
   - Estimate arbitrage profit (~2-5% of collateral value)
@@ -197,7 +198,7 @@ This implementation plan breaks down the feature into discrete, manageable codin
   - Skip if net_estimate < $50
   - _Requirements: 1.2, 3.2.4_
 
-- [ ] 4.6 Write unit tests for OpportunityDetector
+- [x] 4.6 Write unit tests for OpportunityDetector
 
   - Test health factor calculation with various collateral/debt ratios
   - Test multi-oracle sanity checks with divergent prices
@@ -206,8 +207,9 @@ This implementation plan breaks down the feature into discrete, manageable codin
   - Test profit estimation accuracy
   - _Requirements: 7.1.1_
 
-- [ ] 5. Implement ExecutionPlanner module
-- [ ] 5.1 Implement transaction construction
+- [x] 5. Implement ExecutionPlanner module
+
+- [x] 5.1 Implement transaction construction
 
   - Build complete transaction with Chimera contract executeLiquidation call
   - Encode function parameters (lendingProtocol, borrower, collateralAsset, debtAsset, debtAmount, minProfit)
@@ -215,7 +217,7 @@ This implementation plan breaks down the feature into discrete, manageable codin
   - Set minProfit parameter to 50% of estimated profit
   - _Requirements: 1.3, 3.3.1_
 
-- [ ] 5.2 Implement on-chain simulation (CRITICAL)
+- [x] 5.2 Implement on-chain simulation (CRITICAL)
 
   - Execute eth_call with transaction data against current block
   - Parse simulation result to extract actual profit amount in wei
@@ -225,7 +227,7 @@ This implementation plan breaks down the feature into discrete, manageable codin
   - Log all simulation failures with opportunity details
   - _Requirements: 1.3, 3.3.2_
 
-- [ ] 5.3 Implement Base L2 cost calculation
+- [x] 5.3 Implement Base L2 cost calculation
 
   - Calculate L2 execution cost: gas_estimate \* (base_fee + priority_fee)
   - Fetch L1 scalar and gas price from Base system contracts (0x4200000000000000000000000000000000000015)
@@ -234,7 +236,7 @@ This implementation plan breaks down the feature into discrete, manageable codin
   - Convert to USD using real-time ETH/USD oracle price
   - _Requirements: 1.3, 3.3.3_
 
-- [ ] 5.4 Implement complete cost calculation
+- [x] 5.4 Implement complete cost calculation
 
   - Calculate builder bribe as percentage of gross profit
   - Calculate flash loan premium (0.05-0.09% depending on protocol)
@@ -244,7 +246,7 @@ This implementation plan breaks down the feature into discrete, manageable codin
   - Reject if net_profit_usd < $50
   - _Requirements: 1.3, 3.3.3, 3.3.4_
 
-- [ ] 5.5 Implement dynamic bribe optimization
+- [x] 5.5 Implement dynamic bribe optimization
 
   - Start with 15% of gross profit as baseline bribe
   - Track inclusion rate over last 100 submissions per submission path
@@ -255,7 +257,7 @@ This implementation plan breaks down the feature into discrete, manageable codin
   - Update bribe model every 100 submissions
   - _Requirements: 1.3, 3.3.5_
 
-- [ ] 5.6 Implement submission path selection
+- [x] 5.6 Implement submission path selection
 
   - Implement adapters for direct mempool, Base-native builders (if available), private RPCs
   - Calculate expected value for each path: EV = (profit \* inclusion_rate) - (bribe + fees)
@@ -263,7 +265,7 @@ This implementation plan breaks down the feature into discrete, manageable codin
   - Implement failover to alternative path if primary fails
   - _Requirements: 1.3, 3.3.7_
 
-- [ ] 5.7 Implement bundle signing and submission
+- [x] 5.7 Implement bundle signing and submission
 
   - Sign transaction with operator private key from AWS Secrets Manager
   - Submit to selected submission path
@@ -272,7 +274,7 @@ This implementation plan breaks down the feature into discrete, manageable codin
   - Implement retry logic with exponential backoff (max 3 retries)
   - _Requirements: 1.3, 1.4, 3.3.6_
 
-- [ ]\* 5.8 Write unit tests for ExecutionPlanner
+- [x] 5.8 Write unit tests for ExecutionPlanner
 
   - Test simulation result parsing
   - Test L2 + L1 cost calculation with various gas prices
