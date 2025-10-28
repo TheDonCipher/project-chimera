@@ -87,15 +87,15 @@ python -c "from bot.src.config import init_config; config = init_config(); print
 - Safety limits and thresholds
 - Operational parameters
 
-## Development Status
+## Dry-Run Mode (Testing Without Risk)
 
-This is the initial project structure. Core modules are scaffolded but not yet implemented.
+**Test the bot against live Base mainnet without submitting transactions!**
 
-### Completed Tasks
+Dry-run mode allows you to validate strategy profitability before deploying capital:
 
-- ✓ Task 1.1: Directory structure created
-- ✓ Task 1.2: Configuration management system implemented
-- ✓ Task 1.3: Core data models and types defined
+```bash
+# Start in dry-run mode
+python -m bot.src.maata models and types defined
 - ✓ Task 1.4: Database schema and connection handling implemented
 
 ### Next Steps
@@ -124,6 +124,32 @@ The system follows a modular design with clear separation of concerns:
 - Graduated scaling with validation gates
 - Comprehensive audit trail
 - Real-time monitoring and alerting
+
+## Monitoring Stack (Optional)
+
+The project includes a complete monitoring stack with Prometheus and Grafana for local development:
+
+### Start with monitoring
+
+```bash
+docker-compose --profile monitoring up -d
+```
+
+### Access dashboards
+
+- **Grafana**: http://localhost:3000 (admin/admin)
+- **Prometheus**: http://localhost:9090
+- **Bot Metrics**: http://localhost:8000/metrics
+
+### Features
+
+- Real-time metrics visualization
+- Performance tracking (inclusion rate, simulation accuracy)
+- Profitability monitoring (total profit, daily volume)
+- System health monitoring (state, failures, balance)
+- Console-based alerting for local development
+
+See [infrastructure/MONITORING.md](infrastructure/MONITORING.md) for detailed documentation.
 
 ## License
 

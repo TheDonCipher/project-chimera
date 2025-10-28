@@ -149,6 +149,18 @@ export ENVIRONMENT=testnet
 python bot/src/main.py
 ```
 
+**Optional: Run local fork for testing:**
+
+```bash
+# Start Anvil local fork of Base mainnet
+docker-compose --profile testing up -d anvil
+
+# Or use Makefile
+make anvil
+
+# See chimera/infrastructure/ANVIL_SETUP.md for details
+```
+
 ## Development Phases
 
 ### Phase 1: Local Development (Weeks 1-12)

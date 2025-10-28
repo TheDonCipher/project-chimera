@@ -1,0 +1,1 @@
+2025-10-28 04:35:38 [   DEBUG] rlp.codec - Consider installing rusty-rlp to improve pyrlp performance with a rust basedbackend. Not currently functional for Python 3.11

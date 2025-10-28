@@ -1,0 +1,138 @@
+# Prometheus Alerting Rules for Local Development
+# These alerts log to console instead of sending SMS/email
+
+groups:
+  - name: chimera_bot_alerts
+    interval: 30s
+    rules:
+      # CRITICAL: System halted
+      - alert: SystemHalted
+        expr: chimera_system_state == 2 # HALTED = 2
+        for: 1m
+        labels:
+          severity: critical
+          component: safety_controller
+        annotations:
+          summary: 'Chimera bot entered HALTED state'
+          description: 'The bot has entered HALTED state and is not executing any transactions. Manual intervention required.'
+          console_log: '[CRITICAL] System HALTED - check logs for details'
+
+      # CRITICAL: Operator balance low
+      - alert: OperatorBalanceLow
+        expr: chimera_operator_balance_eth < 0.1
+        for: 5m
+        labels:
+          severity: critical
+          component: wallet
+        annotations:
+          summary: 'Operator wallet balance critically low'
+          description: 'Operator balance is {{ $value }} ETH, below 0.1 ETH threshold. Fund the wallet immediately.'
+          console_log: '[CRITICAL] Operator balance low ({{ $value }} ETH)'
+
+      # HIGH: System throttled
+      - alert: SystemThrottled
+        expr: chimera_system_state == 1 # THROTTLED = 1
+        for: 5m
+        labels:
+          severity: high
+          component: safety_controller
+        annotations:
+          summary: 'Chimera bot entered THROTTLED state'
+          description: 'The bot is in THROTTLED state, executing at 50% rate due to performance issues.'
+          console_log: '[HIGH] System THROTTLED - performance degraded'
+
+      # HIGH: Low inclusion rate
+      - alert: LowInclusionRate
+        expr: chimera_inclusion_rate < 0.50
+        for: 10m
+        labels:
+          severity: high
+          component: execution_planner
+        annotations:
+          summary: 'Transaction inclusion rate below 50%'
+          description: 'Inclusion rate is {{ $value | humanizePercentage }}, indicating competitive pressure or bribe optimization issues.'
+          console_log: '[HIGH] Low inclusion rate ({{ $value | humanizePercentage }})'
+
+      # HIGH: Low simulation accuracy
+      - alert: LowSimulationAccuracy
+        expr: chimera_simulation_accuracy < 0.85
+        for: 10m
+        labels:
+          severity: high
+          component: execution_planner
+        annotations:
+          summary: 'Simulation accuracy below 85%'
+          description: 'Simulation accuracy is {{ $value | humanizePercentage }}, indicating state divergence or oracle issues.'
+          console_log: '[HIGH] Low simulation accuracy ({{ $value | humanizePercentage }})'
+
+      # HIGH: Consecutive failures
+      - alert: ConsecutiveFailures
+        expr: chimera_consecutive_failures >= 2
+        for: 2m
+        labels:
+          severity: high
+          component: safety_controller
+        annotations:
+          summary: 'Multiple consecutive execution failures'
+          description: '{{ $value }} consecutive failures detected. System may enter HALTED state soon.'
+          console_log: '[HIGH] {{ $value }} consecutive failures'
+
+      # MEDIUM: Approaching daily volume limit
+      - alert: DailyVolumeLimitApproaching
+        expr: (chimera_daily_volume_usd / chimera_daily_limit_usd) > 0.80
+        for: 5m
+        labels:
+          severity: medium
+          component: safety_controller
+        annotations:
+          summary: 'Daily volume limit approaching'
+          description: 'Daily volume is {{ $value | humanizePercentage }} of limit. Executions will be blocked when limit is reached.'
+          console_log: '[MEDIUM] Daily volume at {{ $value | humanizePercentage }} of limit'
+
+      # MEDIUM: No opportunities detected
+      - alert: NoOpportunitiesDetected
+        expr: rate(chimera_opportunities_detected_total[10m]) == 0
+        for: 30m
+        labels:
+          severity: medium
+          component: opportunity_detector
+        annotations:
+          summary: 'No liquidation opportunities detected'
+          description: 'No opportunities have been detected in the last 30 minutes. Check market conditions or detector logic.'
+          console_log: '[MEDIUM] No opportunities detected for 30 minutes'
+
+      # MEDIUM: High state divergence events
+      - alert: HighStateDivergence
+        expr: rate(chimera_state_divergence_events_total[10m]) > 0.1
+        for: 5m
+        labels:
+          severity: medium
+          component: state_engine
+        annotations:
+          summary: 'High rate of state divergence events'
+          description: 'State divergence events occurring at {{ $value }} per second. Check RPC provider reliability.'
+          console_log: '[MEDIUM] High state divergence rate'
+
+      # LOW: Bot uptime
+      - alert: BotRestarted
+        expr: time() - chimera_start_time_seconds < 300
+        for: 1m
+        labels:
+          severity: low
+          component: main
+        annotations:
+          summary: 'Chimera bot recently restarted'
+          description: 'Bot started {{ $value | humanizeDuration }} ago.'
+          console_log: '[LOW] Bot restarted'
+
+      # Metrics endpoint down
+      - alert: MetricsEndpointDown
+        expr: up{job="chimera-bot"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: monitoring
+        annotations:
+          summary: 'Chimera bot metrics endpoint is down'
+          description: 'Cannot scrape metrics from the bot. The bot may have crashed or the metrics endpoint is not responding.'
+          console_log: '[CRITICAL] Metrics endpoint down - bot may have crashed'

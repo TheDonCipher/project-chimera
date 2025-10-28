@@ -1,0 +1,62 @@
+# Prometheus Configuration for Chimera Bot Monitoring
+# Scrapes metrics from the bot's HTTP metrics endpoint
+
+global:
+  scrape_interval: 15s # Scrape metrics every 15 seconds
+  evaluation_interval: 15s # Evaluate alerting rules every 15 seconds
+  external_labels:
+    environment: 'local'
+    project: 'chimera'
+
+# Alertmanager configuration (for local development, just log to console)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+          # No alertmanager in local dev - alerts will be logged
+
+# Load alerting rules
+rule_files:
+  - '/etc/prometheus/alerts.yml'
+
+# Scrape configurations
+scrape_configs:
+  # Scrape Chimera bot metrics
+  - job_name: 'chimera-bot'
+    static_configs:
+      - targets: ['bot:8000']
+        labels:
+          service: 'chimera-bot'
+          component: 'mev-liquidation'
+
+    # Scrape interval for bot metrics
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+    # Metrics path
+    metrics_path: '/metrics'
+
+    # Relabel configs
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'chimera-bot'
+
+  # Scrape Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+
+  # Scrape PostgreSQL exporter (if added later)
+  - job_name: 'postgres'
+    static_configs:
+      - targets: []
+        # Add postgres-exporter:9187 if you add postgres_exporter service
+
+  # Scrape Redis exporter (if added later)
+  - job_name: 'redis'
+    static_configs:
+      - targets: []
+        # Add redis-exporter:9121 if you add redis_exporter service

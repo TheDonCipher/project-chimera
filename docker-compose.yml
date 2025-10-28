@@ -1,32 +1,37 @@
 # Docker Compose for Project Chimera Local Development
-# Provides PostgreSQL and Redis for local testing
+# Provides complete local development environment with PostgreSQL, Redis, and bot application
 
 version: '3.8'
 
 services:
   # PostgreSQL database for execution logs and metrics
   postgres:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
     container_name: chimera-postgres
     environment:
       POSTGRES_DB: chimera
       POSTGRES_USER: chimera_user
       POSTGRES_PASSWORD: chimera_password
+      POSTGRES_INITDB_ARGS: '-E UTF8'
     ports:
       - '5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./chimera/infrastructure/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U chimera_user -d chimera']
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    networks:
+      - chimera-network
 
   # Redis cache for hot state data
   redis:
     image: redis:7-alpine
     container_name: chimera-redis
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
     ports:
       - '6379:6379'
     volumes:
@@ -37,6 +42,108 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    networks:
+      - chimera-network
+
+  # Test PostgreSQL database (isolated from development)
+  postgres-test:
+    image: postgres:16-alpine
+    container_name: chimera-postgres-test
+    environment:
+      POSTGRES_DB: chimera_test
+      POSTGRES_USER: chimera_test_user
+      POSTGRES_PASSWORD: chimera_test_password
+      POSTGRES_INITDB_ARGS: '-E UTF8'
+    ports:
+      - '5433:5432'
+    volumes:
+      - ./chimera/infrastructure/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U chimera_test_user -d chimera_test']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - chimera-network
+    profiles:
+      - test
+
+  # Test Redis cache (isolated from development, uses DB 1)
+  redis-test:
+    image: redis:7-alpine
+    container_name: chimera-redis-test
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - '6380:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - chimera-network
+    profiles:
+      - test
+
+  # Chimera MEV Bot Application
+  bot:
+    build:
+      context: ./chimera
+      dockerfile: Dockerfile
+    container_name: chimera-bot
+    environment:
+      # Database connection (use container hostnames)
+      DATABASE_URL: postgresql://chimera_user:chimera_password@postgres:5432/chimera
+      REDIS_URL: redis://redis:6379/0
+
+      # Environment
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FORMAT: ${LOG_FORMAT:-text}
+
+      # Feature flags
+      ENABLE_EXECUTION: ${ENABLE_EXECUTION:-false}
+      ENABLE_MONITORING: ${ENABLE_MONITORING:-true}
+      ENABLE_ALERTS: ${ENABLE_ALERTS:-false}
+      DRY_RUN: ${DRY_RUN:-true}
+      DEBUG: ${DEBUG:-false}
+
+      # RPC endpoints (from .env file)
+      ALCHEMY_API_KEY: ${ALCHEMY_API_KEY}
+      ALCHEMY_WSS: ${ALCHEMY_WSS}
+      ALCHEMY_HTTPS: ${ALCHEMY_HTTPS}
+      QUICKNODE_HTTPS: ${QUICKNODE_HTTPS}
+
+      # Operator wallet (from .env file)
+      OPERATOR_PRIVATE_KEY: ${OPERATOR_PRIVATE_KEY}
+      OPERATOR_ADDRESS: ${OPERATOR_ADDRESS}
+      TREASURY_ADDRESS: ${TREASURY_ADDRESS}
+
+      # Operational limits (optional overrides)
+      MAX_SINGLE_EXECUTION_USD: ${MAX_SINGLE_EXECUTION_USD:-}
+      MAX_DAILY_VOLUME_USD: ${MAX_DAILY_VOLUME_USD:-}
+      MIN_PROFIT_USD: ${MIN_PROFIT_USD:-}
+    volumes:
+      # Mount logs and data directories for persistence
+      - ./logs:/app/logs
+      - ./data:/app/data
+      # Mount source code for development (hot reload)
+      - ./chimera/bot:/app/bot
+      - ./chimera/config.yaml:/app/config.yaml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - chimera-network
+    healthcheck:
+      test: ['CMD', 'python', '-c', 'import sys; sys.exit(0)']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   # pgAdmin for database management (optional)
   pgadmin:
@@ -45,11 +152,17 @@ services:
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@chimera.local
       PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
     ports:
       - '5050:80'
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
     depends_on:
       - postgres
     restart: unless-stopped
+    networks:
+      - chimera-network
     profiles:
       - tools # Only start with: docker-compose --profile tools up
 
@@ -64,15 +177,120 @@ services:
     depends_on:
       - redis
     restart: unless-stopped
+    networks:
+      - chimera-network
     profiles:
       - tools # Only start with: docker-compose --profile tools up
+
+  # Prometheus for metrics collection (optional)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: chimera-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    ports:
+      - '9090:9090'
+    volumes:
+      - ./chimera/infrastructure/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./chimera/infrastructure/prometheus-alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      - bot
+    restart: unless-stopped
+    networks:
+      - chimera-network
+    profiles:
+      - monitoring # Only start with: docker-compose --profile monitoring up
+
+  # Grafana for metrics visualization (optional)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: chimera-grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+      - GF_INSTALL_PLUGINS=
+    ports:
+      - '3000:3000'
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./chimera/infrastructure/grafana-provisioning:/etc/grafana/provisioning:ro
+      - ./chimera/infrastructure/grafana-dashboard.json:/etc/grafana/provisioning/dashboards/json/chimera-dashboard.json:ro
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    networks:
+      - chimera-network
+    profiles:
+      - monitoring # Only start with: docker-compose --profile monitoring up
+
+  # Anvil local RPC node for Base mainnet fork (optional for advanced testing)
+  anvil:
+    image: ghcr.io/foundry-rs/foundry:latest
+    container_name: chimera-anvil
+    command:
+      - anvil
+      - --host
+      - '0.0.0.0'
+      - --port
+      - '8545'
+      - --fork-url
+      - '${BASE_RPC_URL:-https://mainnet.base.org}'
+      - --fork-block-number
+      - '${FORK_BLOCK_NUMBER:-}'
+      - --chain-id
+      - '8453'
+      - --state
+      - '/anvil-state/state.json'
+      - --state-interval
+      - '10'
+      - --accounts
+      - '10'
+      - --balance
+      - '10000'
+      - --gas-limit
+      - '30000000'
+      - --code-size-limit
+      - '50000'
+      - --no-rate-limit
+    ports:
+      - '8545:8545'
+    volumes:
+      - anvil_state:/anvil-state
+    restart: unless-stopped
+    networks:
+      - chimera-network
+    profiles:
+      - testing # Only start with: docker-compose --profile testing up
+    healthcheck:
+      test:
+        ['CMD', 'cast', 'block-number', '--rpc-url', 'http://localhost:8545']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
 volumes:
   postgres_data:
     driver: local
   redis_data:
     driver: local
+  pgadmin_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  anvil_state:
+    driver: local
 
 networks:
-  default:
+  chimera-network:
+    driver: bridge
     name: chimera-network

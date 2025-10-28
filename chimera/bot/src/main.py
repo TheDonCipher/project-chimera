@@ -21,7 +21,9 @@ from .state_engine import StateEngine
 from .opportunity_detector import OpportunityDetector
 from .execution_planner import ExecutionPlanner
 from .safety_controller import SafetyController
+from .metrics_server import MetricsServer
 from .types import SystemState, ChimeraError, RPCError, DatabaseError
+import time
 
 
 class ChimeraBot:
@@ -35,17 +37,19 @@ class ChimeraBot:
     - Export monitoring metrics
     """
     
-    def __init__(self):
+    def __init__(self, dry_run: bool = False):
         self.logger = get_logger("chimera")
         self.config = None
         self.web3 = None
         self.backup_web3 = None
+        self.dry_run = dry_run
         
         # Modules
         self.state_engine: Optional[StateEngine] = None
         self.opportunity_detector: Optional[OpportunityDetector] = None
         self.execution_planner: Optional[ExecutionPlanner] = None
         self.safety_controller: Optional[SafetyController] = None
+        self.metrics_server: Optional[MetricsServer] = None
         
         # Running flag
         self._running = False
@@ -55,6 +59,13 @@ class ChimeraBot:
         self._opportunities_detected = 0
         self._bundles_submitted = 0
         self._last_metrics_export = 0
+        self._start_time = time.time()
+        
+        # Dry-run specific tracking
+        if self.dry_run:
+            self._dry_run_simulations_success = 0
+            self._dry_run_simulations_failed = 0
+            self._dry_run_theoretical_profit = Decimal("0")
     
     async def initialize(self):
         """
@@ -192,6 +203,9 @@ class ChimeraBot:
                 db_manager=db_manager
             )
             
+            # MetricsServer
+            self.metrics_server = MetricsServer(port=8000)
+            
             self.logger.info("All modules initialized successfully")
             
             # Log initialization complete
@@ -213,6 +227,17 @@ class ChimeraBot:
         """Start the bot and all background tasks"""
         try:
             self._running = True
+            
+            # Start metrics server
+            await self.metrics_server.start()
+            
+            # Set initial metrics
+            MetricsServer.set_bot_info(
+                network=self.config.network_name,
+                chain_id=self.config.chain_id,
+                version="1.0.0"
+            )
+            MetricsServer.set_start_time(self._start_time)
             
             # Start StateEngine
             await self.state_engine.start()
@@ -246,6 +271,9 @@ class ChimeraBot:
         
         if self.opportunity_detector:
             await self.opportunity_detector.stop()
+        
+        if self.metrics_server:
+            await self.metrics_server.stop()
         
         # Signal shutdown complete
         self._shutdown_event.set()
@@ -309,6 +337,7 @@ class ChimeraBot:
                             continue
                         
                         self._opportunities_detected += 1
+                        MetricsServer.increment_opportunities_detected()
                         
                         # Get ETH/USD price for cost calculation
                         try:
@@ -325,6 +354,8 @@ class ChimeraBot:
                         )
                         
                         if not bundle:
+                            if self.dry_run:
+                                self._dry_run_simulations_failed += 1
                             self.logger.debug(
                                 f"Execution planning failed for {opportunity.position.protocol}:"
                                 f"{opportunity.position.user}"
@@ -340,7 +371,29 @@ class ChimeraBot:
                             )
                             continue
                         
-                        # Submit bundle
+                        # DRY-RUN MODE: Skip actual submission
+                        if self.dry_run:
+                            self._dry_run_simulations_success += 1
+                            self._dry_run_theoretical_profit += bundle.net_profit_usd
+                            self.logger.info(
+                                "[DRY-RUN] Would submit bundle",
+                                extra={
+                                    "dry_run": True,
+                                    "protocol": opportunity.position.protocol,
+                                    "borrower": opportunity.position.user,
+                                    "net_profit_usd": float(bundle.net_profit_usd),
+                                    "simulated_profit_usd": float(bundle.simulated_profit_usd),
+                                    "total_cost_usd": float(bundle.total_cost_usd),
+                                    "submission_path": bundle.submission_path.value,
+                                    "health_factor": float(opportunity.health_factor),
+                                    "theoretical_profit_total": float(self._dry_run_theoretical_profit),
+                                    "simulations_success": self._dry_run_simulations_success,
+                                    "simulations_failed": self._dry_run_simulations_failed
+                                }
+                            )
+                            continue
+                        
+                        # Submit bundle (PRODUCTION MODE ONLY)
                         success, tx_hash = self.execution_planner.submit_bundle(
                             bundle=bundle,
                             current_state=current_state
@@ -348,6 +401,7 @@ class ChimeraBot:
                         
                         if success:
                             self._bundles_submitted += 1
+                            MetricsServer.increment_bundles_submitted()
                             self.logger.info(
                                 f"Bundle submitted successfully: {tx_hash}",
                                 extra={
@@ -519,21 +573,67 @@ class ChimeraBot:
                 cache_stats = self.state_engine.get_cache_stats()
                 safety_status = self.safety_controller.get_status()
                 
-                # Log metrics
-                self.logger.info(
-                    "Metrics snapshot",
-                    extra={
-                        "system_state": self.safety_controller.current_state.value,
-                        "opportunities_detected": self._opportunities_detected,
-                        "bundles_submitted": self._bundles_submitted,
-                        "inclusion_rate": float(metrics.inclusion_rate),
-                        "simulation_accuracy": float(metrics.simulation_accuracy),
-                        "daily_volume_usd": float(safety_status['daily_volume_usd']),
-                        "consecutive_failures": metrics.consecutive_failures,
-                        "positions_cached": cache_stats['total_positions'],
-                        "current_block": cache_stats['current_block']
-                    }
+                # Update Prometheus metrics
+                MetricsServer.update_system_state(self.safety_controller.current_state.value)
+                MetricsServer.update_inclusion_rate(metrics.inclusion_rate)
+                MetricsServer.update_simulation_accuracy(metrics.simulation_accuracy)
+                MetricsServer.update_total_profit(metrics.total_profit_usd)
+                MetricsServer.update_daily_volume(safety_status['daily_volume_usd'])
+                MetricsServer.update_daily_limit(safety_status['daily_limit_usd'])
+                MetricsServer.update_consecutive_failures(metrics.consecutive_failures)
+                MetricsServer.update_positions_cached(cache_stats['total_positions'])
+                MetricsServer.update_current_block(cache_stats['current_block'])
+                
+                # Update operator balance
+                operator_balance = self.web3.eth.get_balance(
+                    Web3.to_checksum_address(self.config.execution.operator_address)
                 )
+                operator_balance_eth = Decimal(operator_balance) / Decimal(10**18)
+                MetricsServer.update_operator_balance(operator_balance_eth)
+                
+                # Log metrics
+                if self.dry_run:
+                    # Dry-run specific metrics
+                    uptime_hours = (time.time() - self._start_time) / 3600
+                    opportunities_per_hour = self._opportunities_detected / uptime_hours if uptime_hours > 0 else 0
+                    simulation_success_rate = (
+                        self._dry_run_simulations_success / 
+                        (self._dry_run_simulations_success + self._dry_run_simulations_failed)
+                        if (self._dry_run_simulations_success + self._dry_run_simulations_failed) > 0 
+                        else 0
+                    )
+                    
+                    self.logger.info(
+                        "[DRY-RUN] Metrics snapshot",
+                        extra={
+                            "dry_run": True,
+                            "uptime_hours": round(uptime_hours, 2),
+                            "opportunities_detected": self._opportunities_detected,
+                            "opportunities_per_hour": round(opportunities_per_hour, 2),
+                            "simulations_success": self._dry_run_simulations_success,
+                            "simulations_failed": self._dry_run_simulations_failed,
+                            "simulation_success_rate": round(simulation_success_rate * 100, 2),
+                            "theoretical_profit_usd": float(self._dry_run_theoretical_profit),
+                            "positions_cached": cache_stats['total_positions'],
+                            "current_block": cache_stats['current_block']
+                        }
+                    )
+                else:
+                    # Production metrics
+                    self.logger.info(
+                        "Metrics snapshot",
+                        extra={
+                            "system_state": self.safety_controller.current_state.value,
+                            "opportunities_detected": self._opportunities_detected,
+                            "bundles_submitted": self._bundles_submitted,
+                            "inclusion_rate": float(metrics.inclusion_rate),
+                            "simulation_accuracy": float(metrics.simulation_accuracy),
+                            "daily_volume_usd": float(safety_status['daily_volume_usd']),
+                            "consecutive_failures": metrics.consecutive_failures,
+                            "positions_cached": cache_stats['total_positions'],
+                            "current_block": cache_stats['current_block']
+                        }
+                    )
                 
                 # Export to CloudWatch if enabled
                 if self.config.monitoring.cloudwatch_enabled:
@@ -656,6 +756,16 @@ async def main():
     
     Initializes configuration, logging, and starts the main event loop.
     """
+    # Parse command line arguments
+    import argparse
+    parser = argparse.ArgumentParser(description='Chimera MEV Liquidation Bot')
+    parser.add_argument(
+        '--dry-run',
+        action='store_true',
+        help='Run in dry-run mode (detect and simulate, but do not submit transactions)'
+    )
+    args = parser.parse_args()
+    
     # Load configuration first (before logging)
     config = get_config()
     
@@ -674,12 +784,19 @@ async def main():
         extra={
             "network": config.network_name,
             "chain_id": config.chain_id,
-            "operator": config.execution.operator_address
+            "operator": config.execution.operator_address,
+            "dry_run": args.dry_run
         }
     )
     
+    if args.dry_run:
+        logger.warning("=" * 80)
+        logger.warning("DRY-RUN MODE ENABLED")
+        logger.warning("Opportunities will be detected and simulated, but NO transactions will be submitted")
+        logger.warning("=" * 80)
+    
     # Create bot instance
-    bot = ChimeraBot()
+    bot = ChimeraBot(dry_run=args.dry_run)
     
     # Setup signal handlers for graceful shutdown
     def signal_handler(sig, frame):

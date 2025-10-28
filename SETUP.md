@@ -576,6 +576,82 @@ curl -X POST $ALCHEMY_HTTPS \
 psql -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE chimera TO chimera_user;"
 ```
 
+## Optional: Anvil Local Fork (Advanced Testing)
+
+For advanced testing scenarios, you can run a local fork of Base mainnet using Anvil. This is useful for:
+
+- Testing against real mainnet state without spending gas
+- Replaying historical liquidations
+- Debugging contract interactions
+- Running integration tests
+
+### 1. Start Anvil
+
+```bash
+# Using Docker Compose (recommended)
+docker-compose --profile testing up -d anvil
+
+# Or using Makefile
+make anvil
+```
+
+### 2. Verify Anvil is Running
+
+```bash
+# Check block number
+cast block-number --rpc-url http://localhost:8545
+
+# Check chain ID (should be 8453 for Base)
+cast chain-id --rpc-url http://localhost:8545
+```
+
+### 3. Configure Bot to Use Anvil
+
+Update your `.env` file:
+
+```bash
+# Use Anvil for local testing
+ALCHEMY_HTTPS=http://localhost:8545
+QUICKNODE_HTTPS=http://localhost:8545
+```
+
+### 4. Fork Configuration
+
+To fork from a specific block (useful for reproducible tests):
+
+```bash
+# Add to .env
+FORK_BLOCK_NUMBER=10000000
+
+# Restart Anvil
+docker-compose --profile testing restart anvil
+```
+
+### 5. Reset Fork State
+
+To reset Anvil to a fresh fork:
+
+```bash
+# Using reset script
+reset.bat anvil
+
+# Or using Makefile
+make anvil-reset
+```
+
+### 6. Run Tests Against Fork
+
+```bash
+# Run Foundry tests against local fork
+make fork-test
+
+# Or manually
+cd chimera/contracts
+forge test --fork-url http://localhost:8545 -vvv
+```
+
+For detailed Anvil documentation, see `chimera/infrastructure/ANVIL_SETUP.md`.
+
 ## Next Steps
 
 After successful setup:
