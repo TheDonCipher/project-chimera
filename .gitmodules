@@ -1,0 +1,6 @@
+[submodule "chimera/contracts/lib/forge-std"]
+	path = chimera/contracts/lib/forge-std
+	url = https://github.com/foundry-rs/forge-std
+[submodule "chimera/contracts/lib/openzeppelin-contracts"]
+	path = chimera/contracts/lib/openzeppelin-contracts
+	url = https://github.com/OpenZeppelin/openzeppelin-contracts
